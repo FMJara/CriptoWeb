@@ -113,6 +113,7 @@ def serve_data(symbol):
     df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
     df = validate_data(df)
+    df = df.sort_values("timestamp").reset_index(drop=True)
 
     if len(df) < 50:
         return jsonify([])
@@ -132,13 +133,23 @@ def serve_data(symbol):
     df['rsi'] = rsi(df['close'], 14)
     df['ewo'] = df['close'].rolling(5).mean() - df['close'].rolling(35).mean()
 
+    # Escalado visual
+    df['atr_scaled'] = df['atr'] * 10
+    df['ewo_scaled'] = df['ewo'] * 100
+
     df.fillna(0, inplace=True)
     df = df.round(6)
 
     signals = generate_alert(df)
 
     return jsonify({
-        "data": df.to_dict(orient="records"),
+        "data": df[[
+            "timestamp", "close", "tenkan", "kijun", "senkou_a", "senkou_b",
+            "vwap", "sma_50", "sma_200", "rsi", "atr_scaled", "ewo_scaled"
+        ]].rename(columns={
+            "atr_scaled": "atr",
+            "ewo_scaled": "ewo"
+        }).to_dict(orient="records"),
         "alerts": signals,
         "last_updated": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
     })
