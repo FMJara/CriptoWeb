@@ -27,6 +27,13 @@
     <option value="qubic">QUBIC</option>
   </select>
 
+  <label for="timeframeSelect" style="margin-left:20px;">Timeframe:</label>
+  <select id="timeframeSelect">
+    <option value="1d">1D</option>
+    <option value="4h">4H</option>
+    <option value="1h">1H</option>
+  </select>
+
   <button id="infoBtn" style="margin:10px;">ℹ️ ¿Qué significa Ichimoku?</button>
   <div id="infoBox" style="display:none; background:#222; color:white; padding:15px; border-radius:8px; width:80%; margin:auto; text-align:left;">
     <h3>Interpretación de Ichimoku</h3>
@@ -43,18 +50,23 @@
   <div id="chartContainer" style="width:90%; margin:auto; height:600px;"></div>
 
   <script>
-    const select = document.getElementById("cryptoSelect");
+    const cryptoSelect = document.getElementById("cryptoSelect");
+    const timeframeSelect = document.getElementById("timeframeSelect");
 
-    select.addEventListener("change", () => loadChart(select.value));
-    window.onload = () => loadChart(select.value);
+    cryptoSelect.addEventListener("change", () => loadChart());
+    timeframeSelect.addEventListener("change", () => loadChart());
+    window.onload = () => loadChart();
 
     document.getElementById("infoBtn").addEventListener("click", () => {
       const box = document.getElementById("infoBox");
       box.style.display = box.style.display === "none" ? "block" : "none";
     });
 
-    function loadChart(symbol) {
-      fetch(`/api/${symbol}_data`)
+    function loadChart() {
+      const symbol = cryptoSelect.value;
+      const timeframe = timeframeSelect.value;
+
+      fetch(`/api/${symbol}_data?timeframe=${timeframe}`)
         .then(res => res.json())
         .then(response => {
           const data = response.data;
@@ -82,7 +94,7 @@
               { x, y: data.map(d => d.ewo), type: 'scatter', mode: 'lines', name: 'EWO', line: { color: 'lime' }, visible: 'legendonly' }
             ],
             layout: {
-              title: `${symbol.toUpperCase()} Indicadores Técnicos`,
+              title: `${symbol.toUpperCase()} Indicadores Técnicos (${timeframe})`,
               xaxis: { title: 'Fecha y hora' },
               yaxis: { title: 'Precio (USDT)' },
               template: 'plotly_dark'
