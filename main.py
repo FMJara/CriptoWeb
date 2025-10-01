@@ -1,5 +1,4 @@
-import os
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, send_from_directory, request
 import pandas as pd
 import numpy as np
 import time
@@ -14,6 +13,8 @@ SYMBOL_MAP = {
     "xpl": "XPL/USDT", "doge": "DOGE/USDT", "zbcn": "ZBCN/USDT", "paw": "PAW/USDT",
     "dag": "DAG/USDT", "xpr": "XPR/USDT", "qubic": "QUBIC/USDT"
 }
+
+VALID_TIMEFRAMES = ["1d", "4h", "1h"]
 
 exchange = ccxt.mexc({
     'enableRateLimit': True,
@@ -95,10 +96,14 @@ def index():
 @app.route("/api/<symbol>_data")
 def serve_data(symbol):
     symbol = symbol.lower()
+    timeframe = request.args.get("timeframe", "1d")
+    if timeframe not in VALID_TIMEFRAMES:
+        timeframe = "1d"
+
     if symbol not in SYMBOL_MAP:
         return jsonify([])
 
-    raw = fetch_ohlcv_safe(SYMBOL_MAP[symbol])
+    raw = fetch_ohlcv_safe(SYMBOL_MAP[symbol], timeframe=timeframe)
     if not raw:
         return jsonify([])
 
@@ -136,5 +141,4 @@ def serve_data(symbol):
     })
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
