@@ -1,10 +1,3 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Crypto Ichimoku Dashboard</title>
-  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-</head>
 <body style="background-color:#111; color:white; font-family:sans-serif; text-align:center;">
   <h2>Crypto Ichimoku Dashboard</h2>
 
@@ -41,6 +34,7 @@
   </div>
 
   <div id="chartContainer" style="width:90%; margin:auto; height:600px;"></div>
+  <div id="updateTime" style="color:white; margin:10px;">Última actualización: Cargando...</div> <!-- Nuevo div -->
 
   <script>
     const select = document.getElementById("cryptoSelect");
@@ -59,9 +53,11 @@
         .then(response => {
           const data = response.data;
           const alerts = response.alerts;
+          const lastUpdated = response.last_updated; // Captura la hora
 
           if (!data || data.length === 0) {
             document.getElementById("chartContainer").innerHTML = "No hay datos disponibles para esta cripto.";
+            document.getElementById("updateTime").innerHTML = "Última actualización: No disponible";
             return;
           }
 
@@ -91,6 +87,9 @@
 
           Plotly.newPlot('chartContainer', fig.data, fig.layout);
 
+          // Actualiza la hora
+          document.getElementById("updateTime").innerHTML = `Última actualización: ${lastUpdated}`;
+
           const oldAlert = document.getElementById("alertBox");
           if (oldAlert) oldAlert.remove();
 
@@ -109,5 +108,4 @@
         });
     }
   </script>
-</body>
-</html>
+      </body>
