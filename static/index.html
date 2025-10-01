@@ -29,7 +29,7 @@
 
   <label for="timeframeSelect" style="margin-left:20px;">Timeframe:</label>
   <select id="timeframeSelect">
-    <option value="1h">1H</option>
+    <option value="2h">2H</option>
     <option value="1d">1D</option>
   </select>
 
@@ -64,7 +64,6 @@
     function loadChart() {
       const symbol = cryptoSelect.value;
       const timeframe = timeframeSelect.value;
-      const useSecondaryAxis = timeframe === "1h";
 
       fetch(`/api/${symbol}_data?timeframe=${timeframe}`)
         .then(res => res.json())
@@ -86,8 +85,7 @@
               type: 'scatter',
               mode: 'lines',
               name: `Precio ${symbol.toUpperCase()}/USDT`,
-              line: { color: '#00BFFF', width: 2 },
-              yaxis: useSecondaryAxis ? 'y2' : 'y'
+              line: { color: '#00BFFF', width: 2 }
             },
             { x, y: data.map(d => d.tenkan), type: 'scatter', mode: 'lines', name: 'Tenkan', line: { color: 'blue' }, visible: 'legendonly' },
             { x, y: data.map(d => d.kijun), type: 'scatter', mode: 'lines', name: 'Kijun', line: { color: 'green' }, visible: 'legendonly' },
@@ -104,21 +102,9 @@
           const layout = {
             title: `${symbol.toUpperCase()} Indicadores Técnicos (${timeframe})`,
             xaxis: { title: 'Fecha y hora' },
-            yaxis: {
-              title: useSecondaryAxis ? 'Indicadores' : 'Precio (USDT)',
-              automargin: true
-            },
+            yaxis: { title: 'Valores' },
             template: 'plotly_dark'
           };
-
-          if (useSecondaryAxis) {
-            layout.yaxis2 = {
-              title: 'Precio (USDT)',
-              overlaying: 'y',
-              side: 'right',
-              showgrid: false
-            };
-          }
 
           Plotly.newPlot('chartContainer', traces, layout);
 
