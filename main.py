@@ -14,9 +14,8 @@ SYMBOL_MAP = {
     "dag": "DAG/USDT", "xpr": "XPR/USDT", "qubic": "QUBIC/USDT"
 }
 
-# ✅ Solo 2h y 1d
-VALID_TIMEFRAMES = ["2h", "1d"]
-LIMITS = {"2h": 900, "1d": 900}
+VALID_TIMEFRAMES = ["1d", "4h"]
+LIMITS = {"1d": 900, "4h": 900}
 
 exchange = ccxt.mexc({
     'enableRateLimit': True,
@@ -98,9 +97,9 @@ def index():
 @app.route("/api/<symbol>_data")
 def serve_data(symbol):
     symbol = symbol.lower()
-    timeframe = request.args.get("timeframe", "2h")
+    timeframe = request.args.get("timeframe", "4h")
     if timeframe not in VALID_TIMEFRAMES:
-        timeframe = "2h"
+        timeframe = "4h"
 
     limit = LIMITS.get(timeframe, 900)
 
@@ -134,6 +133,10 @@ def serve_data(symbol):
     df['rsi'] = rsi(df['close'], 14)
     df['ewo'] = df['close'].rolling(5).mean() - df['close'].rolling(35).mean()
 
+    # Escalado visual
+    df['atr_scaled'] = df['atr'] * 10
+    df['ewo_scaled'] = df['ewo'] * 100
+
     df.fillna(0, inplace=True)
     df = df.round(6)
 
@@ -142,8 +145,11 @@ def serve_data(symbol):
     return jsonify({
         "data": df[[
             "timestamp", "close", "tenkan", "kijun", "senkou_a", "senkou_b",
-            "vwap", "sma_50", "sma_200", "rsi", "atr", "ewo"
-        ]].to_dict(orient="records"),
+            "vwap", "sma_50", "sma_200", "rsi", "atr_scaled", "ewo_scaled"
+        ]].rename(columns={
+            "atr_scaled": "atr",
+            "ewo_scaled": "ewo"
+        }).to_dict(orient="records"),
         "alerts": signals,
         "last_updated": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
     })
