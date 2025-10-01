@@ -95,7 +95,13 @@
             layout: {
               title: `${symbol.toUpperCase()} Indicadores Técnicos (${timeframe})`,
               xaxis: { title: 'Fecha y hora' },
-              yaxis: { title: 'Precio (USDT)' },
+              yaxis: {
+                title: 'Precio (USDT)',
+                range: [
+                  Math.min(...data.map(d => d.close)) * 0.98,
+                  Math.max(...data.map(d => d.close)) * 1.02
+                ]
+              },
               template: 'plotly_dark'
             }
           };
