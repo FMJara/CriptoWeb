@@ -29,7 +29,7 @@
 
   <label for="timeframeSelect" style="margin-left:20px;">Timeframe:</label>
   <select id="timeframeSelect">
-    <option value="2h">2H</option>
+    <option value="4h">4H</option>
     <option value="1d">1D</option>
   </select>
 
@@ -102,7 +102,10 @@
           const layout = {
             title: `${symbol.toUpperCase()} Indicadores Técnicos (${timeframe})`,
             xaxis: { title: 'Fecha y hora' },
-            yaxis: { title: 'Valores' },
+            yaxis: {
+              title: 'Precio / Indicadores',
+              automargin: true
+            },
             template: 'plotly_dark'
           };
 
