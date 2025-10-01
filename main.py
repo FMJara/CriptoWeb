@@ -14,7 +14,8 @@ SYMBOL_MAP = {
     "dag": "DAG/USDT", "xpr": "XPR/USDT", "qubic": "QUBIC/USDT"
 }
 
-VALID_TIMEFRAMES = ["1d", "4h", "1h"]
+VALID_TIMEFRAMES = ["1d", "1h"]
+LIMITS = {"1d": 900, "1h": 900}
 
 exchange = ccxt.mexc({
     'enableRateLimit': True,
@@ -22,7 +23,7 @@ exchange = ccxt.mexc({
     'options': {'adjustForTimeDifference': True}
 })
 
-def fetch_ohlcv_safe(symbol, timeframe='1d', limit=500, max_retries=3):
+def fetch_ohlcv_safe(symbol, timeframe='1d', limit=900, max_retries=3):
     for attempt in range(max_retries):
         try:
             return exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
@@ -96,14 +97,16 @@ def index():
 @app.route("/api/<symbol>_data")
 def serve_data(symbol):
     symbol = symbol.lower()
-    timeframe = request.args.get("timeframe", "1d")
+    timeframe = request.args.get("timeframe", "1h")
     if timeframe not in VALID_TIMEFRAMES:
-        timeframe = "1d"
+        timeframe = "1h"
+
+    limit = LIMITS.get(timeframe, 900)
 
     if symbol not in SYMBOL_MAP:
         return jsonify([])
 
-    raw = fetch_ohlcv_safe(SYMBOL_MAP[symbol], timeframe=timeframe)
+    raw = fetch_ohlcv_safe(SYMBOL_MAP[symbol], timeframe=timeframe, limit=limit)
     if not raw:
         return jsonify([])
 
