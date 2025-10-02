@@ -29,6 +29,7 @@
 
   <label for="timeframeSelect" style="margin-left:20px;">Timeframe:</label>
   <select id="timeframeSelect">
+    <option value="1h">1H</option>
     <option value="4h">4H</option>
     <option value="1d">1D</option>
   </select>
@@ -78,6 +79,14 @@
 
           const x = data.map(d => new Date(d.timestamp).toLocaleString("es-AR"));
 
+          // Detectar si el precio domina la escala
+          const maxPrice = Math.max(...data.map(d => d.close));
+          const maxIndicator = Math.max(...data.map(d =>
+            Math.max(d.atr, d.ewo, d.rsi, d.vwap, d.sma_50, d.sma_200)
+          ));
+          const priceDominates = maxPrice > maxIndicator * 5;
+          const useSecondaryAxis = priceDominates;
+
           const traces = [
             {
               x,
@@ -85,7 +94,8 @@
               type: 'scatter',
               mode: 'lines',
               name: `Precio ${symbol.toUpperCase()}/USDT`,
-              line: { color: '#00BFFF', width: 2 }
+              line: { color: '#00BFFF', width: 2 },
+              yaxis: useSecondaryAxis ? 'y2' : 'y'
             },
             { x, y: data.map(d => d.tenkan), type: 'scatter', mode: 'lines', name: 'Tenkan', line: { color: 'blue' }, visible: 'legendonly' },
             { x, y: data.map(d => d.kijun), type: 'scatter', mode: 'lines', name: 'Kijun', line: { color: 'green' }, visible: 'legendonly' },
@@ -103,11 +113,20 @@
             title: `${symbol.toUpperCase()} Indicadores Técnicos (${timeframe})`,
             xaxis: { title: 'Fecha y hora' },
             yaxis: {
-              title: 'Precio / Indicadores',
+              title: useSecondaryAxis ? 'Indicadores' : 'Precio (USDT)',
               automargin: true
             },
             template: 'plotly_dark'
           };
+
+          if (useSecondaryAxis) {
+            layout.yaxis2 = {
+              title: 'Precio (USDT)',
+              overlaying: 'y',
+              side: 'right',
+              showgrid: false
+            };
+          }
 
           Plotly.newPlot('chartContainer', traces, layout);
 
