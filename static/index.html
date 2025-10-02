@@ -55,6 +55,7 @@
       return score;
     }
 
+    // --- Detectar pivotes con ATR ---
     function detectarPivotes(data, lookback=5) {
       const pivotes = [];
       for (let i = lookback; i < data.length - lookback; i++) {
@@ -70,6 +71,21 @@
         }
       }
       return pivotes;
+    }
+
+    // --- Conteo básico de ondas Elliott ---
+    function contarOndas(pivotes) {
+      const ondas = [];
+      let label = 1;
+      for (let i = 0; i < pivotes.length; i++) {
+        ondas.push({ ...pivotes[i], label });
+        if (label === 5) label = 'A';
+        else if (label === 'A') label = 'B';
+        else if (label === 'B') label = 'C';
+        else if (label === 'C') label = 1;
+        else label++;
+      }
+      return ondas;
     }
 
     function loadChart() {
@@ -202,6 +218,20 @@
               text: pivotes.map((p, i) => p.type === 'high' ? `▲${i}` : `▼${i}`),
               textposition: 'top center',
               marker: { color: 'white', size: 8, symbol: 'diamond' },
+              visible: 'legendonly'
+            });
+
+            // --- Ondas Elliott básicas ---
+            const ondas = contarOndas(pivotes);
+            traces.push({
+              x: ondas.map(o => new Date(o.timestamp)),
+              y: ondas.map(o => o.close),
+              mode: 'markers+text',
+              type: 'scatter',
+              name: 'Ondas Elliott',
+              text: ondas.map(o => o.label),
+              textposition: 'bottom center',
+              marker: { color: 'gold', size: 10, symbol: 'circle' },
               visible: 'legendonly'
             });
           }
