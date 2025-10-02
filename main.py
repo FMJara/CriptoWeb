@@ -14,8 +14,8 @@ SYMBOL_MAP = {
     "dag": "DAG/USDT", "xpr": "XPR/USDT", "qubic": "QUBIC/USDT"
 }
 
-VALID_TIMEFRAMES = ["1d", "4h"]
-LIMITS = {"1d": 900, "4h": 900}
+VALID_TIMEFRAMES = ["1d", "1h"]
+LIMITS = {"1d": 900, "1h": 900}
 
 exchange = ccxt.mexc({
     'enableRateLimit': True,
@@ -97,9 +97,9 @@ def index():
 @app.route("/api/<symbol>_data")
 def serve_data(symbol):
     symbol = symbol.lower()
-    timeframe = request.args.get("timeframe", "4h")
+    timeframe = request.args.get("timeframe", "1h")
     if timeframe not in VALID_TIMEFRAMES:
-        timeframe = "4h"
+        timeframe = "1h"
 
     limit = LIMITS.get(timeframe, 900)
 
