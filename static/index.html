@@ -82,7 +82,6 @@
             { x, y: data.map(d => d.ewo), type: 'scatter', mode: 'lines', name: 'EWO', line: { color: 'lime' }, visible: 'legendonly' }
           ];
 
-          // Proyección técnica basada en pendiente real + señales
           const last = data[data.length - 1];
           const close = last.close;
           const lastTimestamp = new Date(last.timestamp);
@@ -112,32 +111,52 @@
           const deltas = lastPrices.map((p, i, arr) => i > 0 ? p - arr[i - 1] : 0);
           const avgDelta = deltas.reduce((a, b) => a + b, 0) / deltas.length;
 
-          let adjustment = 1;
-          if (bullish > bearish) adjustment = 1.2;
-          else if (bearish > bullish) adjustment = 0.8;
+          const deltaFactor = timeframe === "1d" ? 1.5 : 1;
 
-          const adjustedDelta = avgDelta * adjustment * direction;
+          // Conservadora
+          const adjustedDeltaConservative = avgDelta * direction * deltaFactor;
+          const colorConservative = direction === 1 ? 'rgba(0,100,0,0.4)' :
+                                    direction === -1 ? 'rgba(100,0,0,0.4)' :
+                                    'rgba(80,80,80,0.4)';
 
-          const color = direction === 1 ? 'rgba(0,150,0,0.5)' :
-                        direction === -1 ? 'rgba(150,0,0,0.5)' :
-                        'rgba(100,100,100,0.5)';
+          // Agresiva
+          const adjustedDeltaAggressive = avgDelta * direction * deltaFactor * 1.5;
+          const colorAggressive = direction === 1 ? 'rgba(0,200,0,0.6)' :
+                                  direction === -1 ? 'rgba(200,0,0,0.6)' :
+                                  'rgba(150,150,150,0.6)';
 
-          const futurePoints = [];
-          let projectedPrice = close;
+          const futurePointsConservative = [];
+          const futurePointsAggressive = [];
+          let priceC = close;
+          let priceA = close;
+
           for (let i = 1; i <= 6; i++) {
             const nextTime = new Date(lastTimestamp);
             nextTime.setHours(nextTime.getHours() + i);
-            projectedPrice += adjustedDelta;
-            futurePoints.push({ x: nextTime, y: projectedPrice });
+            priceC += adjustedDeltaConservative;
+            priceA += adjustedDeltaAggressive;
+            futurePointsConservative.push({ x: nextTime, y: priceC });
+            futurePointsAggressive.push({ x: nextTime, y: priceA });
           }
 
           traces.push({
-            x: futurePoints.map(p => p.x),
-            y: futurePoints.map(p => p.y),
+            x: futurePointsConservative.map(p => p.x),
+            y: futurePointsConservative.map(p => p.y),
             type: 'scatter',
             mode: 'lines',
-            name: 'Proyección técnica',
-            line: { color, dash: 'dot', width: 2 },
+            name: 'Proyección conservadora',
+            line: { color: colorConservative, dash: 'dot', width: 2, shape: 'spline' },
+            opacity: 0.5,
+            showlegend: true
+          });
+
+          traces.push({
+            x: futurePointsAggressive.map(p => p.x),
+            y: futurePointsAggressive.map(p => p.y),
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Proyección agresiva',
+            line: { color: colorAggressive, dash: 'dot', width: 2, shape: 'spline' },
             opacity: 0.6,
             showlegend: true
           });
