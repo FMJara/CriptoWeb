@@ -113,7 +113,7 @@ def serve_data(symbol):
     df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
     df = validate_data(df)
-    df = df.drop_duplicates(subset="timestamp")
+    df = df.sort_values("timestamp").drop_duplicates(subset="timestamp").reset_index(drop=True)
 
     if len(df) < 50:
         return jsonify([])
@@ -133,7 +133,6 @@ def serve_data(symbol):
     df['rsi'] = rsi(df['close'], 14)
     df['ewo'] = df['close'].rolling(5).mean() - df['close'].rolling(35).mean()
 
-    # Escalado visual
     df['atr_scaled'] = df['atr'] * 10
     df['ewo_scaled'] = df['ewo'] * 100
 
