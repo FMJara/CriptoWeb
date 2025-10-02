@@ -113,7 +113,7 @@ def serve_data(symbol):
     df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
     df = validate_data(df)
-    df = df.sort_values("timestamp").reset_index(drop=True)
+    df = df.drop_duplicates(subset="timestamp")
 
     if len(df) < 50:
         return jsonify([])
