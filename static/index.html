@@ -30,7 +30,6 @@
   <label for="timeframeSelect" style="margin-left:20px;">Timeframe:</label>
   <select id="timeframeSelect">
     <option value="1h">1H</option>
-    <option value="4h">4H</option>
     <option value="1d">1D</option>
   </select>
 
@@ -71,15 +70,15 @@
         .then(response => {
           const data = response.data;
           const alerts = response.alerts;
+          const lastUpdated = response.last_updated;
 
           if (!data || data.length === 0) {
             document.getElementById("chartContainer").innerHTML = "No hay datos disponibles para esta cripto.";
             return;
           }
 
-          const x = data.map(d => Date.parse(d.timestamp));
+          const x = data.map(d => new Date(d.timestamp));
 
-          // Detectar si el precio domina la escala
           const maxPrice = Math.max(...data.map(d => d.close));
           const maxIndicator = Math.max(...data.map(d =>
             Math.max(d.atr, d.ewo, d.rsi, d.vwap, d.sma_50, d.sma_200)
@@ -145,8 +144,12 @@
             alertBox.innerHTML = `<h3>📊 Señales detectadas:</h3><ul>${alerts.map(a => `<li>${a}</li>`).join("")}</ul>`;
             document.body.appendChild(alertBox);
           }
+
+          const updateBox = document.createElement("div");
+          updateBox.style.color = "#aaa";
+          updateBox.style.marginTop = "5px";
+          updateBox.innerText = `Última actualización: ${lastUpdated}`;
+          document.getElementById("chartContainer").appendChild(updateBox);
         });
     }
   </script>
-</body>
-</html>
