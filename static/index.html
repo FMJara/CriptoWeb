@@ -77,7 +77,7 @@
             return;
           }
 
-          const x = data.map(d => new Date(d.timestamp).toLocaleString("es-AR"));
+          const x = data.map(d => Date.parse(d.timestamp));
 
           // Detectar si el precio domina la escala
           const maxPrice = Math.max(...data.map(d => d.close));
