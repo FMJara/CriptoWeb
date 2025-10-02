@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Crypto Ichimoku Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.1.min.js"></script>
+</head>
+<body style="background-color:#111; color:white; font-family:sans-serif; text-align:center;">
+  <h2>Crypto Ichimoku Dashboard</h2>
+
+  <label for="cryptoSelect">Selecciona una cripto:</label>
+  <select id="cryptoSelect">
+    <option value="xrp">XRP</option>
+    <option value="xlm">XLM</option>
+    <option value="hbar">HBAR</option>
+    <option value="dovu">DOVU</option>
+    <option value="xdc">XDC</option>
+    <option value="shx">SHX</option>
+    <option value="velo">VELO</option>
+    <option value="xdb">XDB</option>
+    <option value="xpl">XPL</option>
+    <option value="doge">DOGE</option>
+    <option value="zbcn">ZBCN</option>
+    <option value="paw">PAW</option>
+    <option value="dag">DAG</option>
+    <option value="xpr">XPR</option>
+    <option value="qubic">QUBIC</option>
+  </select>
+
+  <label for="timeframeSelect" style="margin-left:20px;">Timeframe:</label>
+  <select id="timeframeSelect">
+    <option value="1h">1H</option>
+    <option value="1d">1D</option>
+  </select>
+
+  <div id="chartContainer" style="width:90%; margin:auto; height:600px;"></div>
+
+  <script>
+    const cryptoSelect = document.getElementById("cryptoSelect");
+    const timeframeSelect = document.getElementById("timeframeSelect");
+
+    cryptoSelect.addEventListener("change", () => loadChart());
+    timeframeSelect.addEventListener("change", () => loadChart());
+    window.onload = () => loadChart();
+
+    function loadChart() {
+      const symbol = cryptoSelect.value;
+      const timeframe = timeframeSelect.value;
+
+      fetch(`/api/${symbol}_data?timeframe=${timeframe}`)
+        .then(res => res.json())
+        .then(response => {
+          const data = response.data;
+          const alerts = response.alerts;
+          const lastUpdated = response.last_updated;
+
+          if (!data || data.length === 0) {
+            document.getElementById("chartContainer").innerHTML = "No hay datos disponibles para esta cripto.";
+            return;
+          }
+
+          const x = data.map(d => new Date(d.timestamp));
+          const price = data.map(d => d.close);
+
+          const traces = [
+            {
+              x,
+              y: price,
+              type: 'scatter',
+              mode: 'lines',
+              name: `Precio ${symbol.toUpperCase()}/USDT`,
+              line: { color: '#00BFFF', width: 2 }
+            },
+            { x, y: data.map(d => d.tenkan), type: 'scatter', mode: 'lines', name: 'Tenkan', line: { color: 'blue' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.kijun), type: 'scatter', mode: 'lines', name: 'Kijun', line: { color: 'green' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.senkou_a), type: 'scatter', mode: 'lines', name: 'Senkou A', line: { color: 'orange' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.senkou_b), type: 'scatter', mode: 'lines', name: 'Senkou B', line: { color: 'brown' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.vwap), type: 'scatter', mode: 'lines', name: 'VWAP', line: { color: 'purple' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.sma_50), type: 'scatter', mode: 'lines', name: 'SMA 50', line: { color: 'cyan' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.sma_200), type: 'scatter', mode: 'lines', name: 'SMA 200', line: { color: 'magenta' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.rsi), type: 'scatter', mode: 'lines', name: 'RSI', line: { color: 'yellow' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.atr), type: 'scatter', mode: 'lines', name: 'ATR', line: { color: 'red' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.ewo), type: 'scatter', mode: 'lines', name: 'EWO', line: { color: 'lime' }, visible: 'legendonly' }
+          ];
+
+          // Proyección futura basada en lógica enriquecida
+          const last = data[data.length - 1];
+          const atr = last.atr;
+          const rsi = last.rsi;
+          const ewo = last.ewo;
+          const tenkan = last.tenkan;
+          const kijun = last.kijun;
+          const sma50 = last.sma_50;
+          const sma200 = last.sma_200;
+          const vwap = last.vwap;
+          const close = last.close;
+          const senkou_a = last.senkou_a;
+          const senkou_b = last.senkou_b;
+
+          let bullish = 0, bearish = 0;
+
+          if (tenkan > kijun) bullish++; else bearish++;
+          if (rsi > 50) bullish++; else bearish++;
+          if (ewo > 0) bullish++; else bearish++;
+          if (close > senkou_a && close > senkou_b) bullish++; else bearish++;
+          if (close > sma50 && sma50 > sma200) bullish++;
+          if (close < vwap && rsi < 40) bearish++;
+
+          const direction = bullish > bearish ? 1 : bullish < bearish ? -1 : 0;
+          const color = direction === 1 ? 'rgba(0,255,0,0.5)' : direction === -1 ? 'rgba(255,0,0,0.5)' : 'rgba(128,128,128,0.5)';
+          const dash = 'dot';
+
+          const futurePoints = [];
+          const lastTimestamp = new Date(last.timestamp);
+          let projectedPrice = close;
+          const atrTrend = data.slice(-5).map(d => d.atr);
+          const atrRising = atrTrend[4] > atrTrend[0];
+          const step = atr * (atrRising ? 1.5 : 1) * direction;
+
+          for (let i = 1; i <= 6; i++) {
+            const nextTime = new Date(lastTimestamp);
+            nextTime.setHours(nextTime.getHours() + i);
+            projectedPrice += step;
+            futurePoints.push({ x: nextTime, y: projectedPrice });
+          }
+
+          traces.push({
+            x: futurePoints.map(p => p.x),
+            y: futurePoints.map(p => p.y),
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Proyección técnica',
+            line: { color, dash, width: 2 },
+            opacity: 0.6,
+            showlegend: true
+          });
+
+          const layout = {
+            title: `${symbol.toUpperCase()} Indicadores Técnicos (${timeframe})`,
+            xaxis: { title: 'Fecha y hora' },
+            yaxis: { title: 'Valor', automargin: true },
+            template: 'plotly_dark'
+          };
+
+          Plotly.newPlot('chartContainer', traces, layout);
+
+          const oldAlert = document.getElementById("alertBox");
+          if (oldAlert) oldAlert.remove();
+
+          if (alerts && alerts.length > 0) {
+            const alertBox = document.createElement("div");
+            alertBox.id = "alertBox";
+            alertBox.style.background = "#222";
+            alertBox.style.color = "white";
+            alertBox.style.padding = "10px";
+            alertBox.style.margin = "10px auto";
+            alertBox.style.width = "80%";
+            alertBox.style.borderRadius = "8px";
+            alertBox.innerHTML = `<h3>📊 Señales detectadas:</h3><ul>${alerts.map(a => `<li>${a}</li>`).join("")}</ul>`;
+            document.body.appendChild(alertBox);
+          }
+
