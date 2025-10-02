@@ -50,9 +50,26 @@
       if (d.ewo > 0) score += 1.2;
       if (d.close > d.senkou_a && d.close > d.senkou_b) score += 2;
       if (d.close > d.sma_50 && d.sma_50 > d.sma_200) score += 2;
-      if (d.rsi > 70) score -= 1; // sobrecompra
-      if (d.rsi < 30) score -= 1; // sobreventa
+      if (d.rsi > 70) score -= 1;
+      if (d.rsi < 30) score -= 1;
       return score;
+    }
+
+    function detectarPivotes(data, lookback=5) {
+      const pivotes = [];
+      for (let i = lookback; i < data.length - lookback; i++) {
+        const slice = data.slice(i - lookback, i + lookback + 1);
+        const max = Math.max(...slice.map(d => d.close));
+        const min = Math.min(...slice.map(d => d.close));
+        const atr = data[i].atr;
+        if (data[i].close === max && (max - min) > atr * 0.5) {
+          pivotes.push({ type: 'high', ...data[i] });
+        }
+        if (data[i].close === min && (max - min) > atr * 0.5) {
+          pivotes.push({ type: 'low', ...data[i] });
+        }
+      }
+      return pivotes;
     }
 
     function loadChart() {
@@ -82,19 +99,19 @@
               name: `Precio ${symbol.toUpperCase()}/USDT`,
               line: { color: '#00BFFF', width: 2 }
             },
-            { x, y: data.map(d => d.tenkan), type: 'scatter', mode: 'lines', name: 'TENKAN', line: { color: 'blue' } },
-            { x, y: data.map(d => d.kijun), type: 'scatter', mode: 'lines', name: 'KIJUN', line: { color: 'green' } },
-            { x, y: data.map(d => d.senkou_a), type: 'scatter', mode: 'lines', name: 'SENKOU A', line: { color: 'orange' } },
-            { x, y: data.map(d => d.senkou_b), type: 'scatter', mode: 'lines', name: 'SENKOU B', line: { color: 'brown' } },
-            { x, y: data.map(d => d.vwap), type: 'scatter', mode: 'lines', name: 'VWAP', line: { color: 'purple' } },
-            { x, y: data.map(d => d.sma_50), type: 'scatter', mode: 'lines', name: 'SMA 50', line: { color: 'cyan' } },
-            { x, y: data.map(d => d.sma_200), type: 'scatter', mode: 'lines', name: 'SMA 200', line: { color: 'magenta' } },
-            { x, y: data.map(d => d.rsi), type: 'scatter', mode: 'lines', name: 'RSI', line: { color: 'yellow' } },
-            { x, y: data.map(d => d.atr), type: 'scatter', mode: 'lines', name: 'ATR', line: { color: 'red' } },
-            { x, y: data.map(d => d.ewo), type: 'scatter', mode: 'lines', name: 'EWO', line: { color: 'lime' } }
+            { x, y: data.map(d => d.tenkan), type: 'scatter', mode: 'lines', name: 'TENKAN', line: { color: 'blue' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.kijun), type: 'scatter', mode: 'lines', name: 'KIJUN', line: { color: 'green' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.senkou_a), type: 'scatter', mode: 'lines', name: 'SENKOU A', line: { color: 'orange' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.senkou_b), type: 'scatter', mode: 'lines', name: 'SENKOU B', line: { color: 'brown' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.vwap), type: 'scatter', mode: 'lines', name: 'VWAP', line: { color: 'purple' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.sma_50), type: 'scatter', mode: 'lines', name: 'SMA 50', line: { color: 'cyan' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.sma_200), type: 'scatter', mode: 'lines', name: 'SMA 200', line: { color: 'magenta' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.rsi), type: 'scatter', mode: 'lines', name: 'RSI', line: { color: 'yellow' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.atr), type: 'scatter', mode: 'lines', name: 'ATR', line: { color: 'red' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.ewo), type: 'scatter', mode: 'lines', name: 'EWO', line: { color: 'lime' }, visible: 'legendonly' }
           ];
 
-          // --- Calcular score actual ---
+          // --- Score actual ---
           const last = data[data.length - 1];
           const score = calcularScore(last);
 
@@ -102,7 +119,7 @@
           if (score > 1.5) direction = 1;
           else if (score < -1.5) direction = -1;
 
-          // --- Simulación de efectividad histórica ---
+          // --- Simulación de efectividad ---
           let aciertos = 0, total = 0;
           for (let i = 20; i < data.length - 6; i++) {
             const s = calcularScore(data[i]);
@@ -117,7 +134,7 @@
           }
           const efectividad = total > 0 ? Math.round((aciertos / total) * 100) : 0;
 
-          // --- Proyección solo si efectividad >= 60% ---
+          // --- Proyección ---
           if (direction !== 0 && efectividad >= 60) {
             const lastTimestamp = new Date(last.timestamp);
             const lastPrices = data.slice(-10).map(d => d.close);
@@ -125,14 +142,13 @@
             const avgDelta = deltas.reduce((a, b) => a + b, 0) / deltas.length;
             const deltaFactor = timeframe === "1d" ? 1.5 : 1;
 
-            // Conservadora
             const adjustedDeltaC = avgDelta * direction * deltaFactor;
+            const adjustedDeltaA = avgDelta * direction * deltaFactor * 1.5;
+
             const colorC = direction === 1 ? 'rgba(0,100,0,0.4)' :
                            direction === -1 ? 'rgba(100,0,0,0.4)' :
                            'rgba(80,80,80,0.4)';
 
-            // Agresiva
-            const adjustedDeltaA = avgDelta * direction * deltaFactor * 1.5;
             const colorA = direction === 1 ? 'rgba(0,200,0,0.6)' :
                            direction === -1 ? 'rgba(200,0,0,0.6)' :
                            'rgba(150,150,150,0.6)';
@@ -150,7 +166,7 @@
               futurePointsC.push({ x: nextTime, y: priceC });
               futurePointsA.push({ x: nextTime, y: priceA });
             }
-           
+
             traces.push({
               x: futurePointsC.map(p => p.x),
               y: futurePointsC.map(p => p.y),
@@ -171,6 +187,22 @@
               line: { color: colorA, dash: 'dot', width: 2, shape: 'spline' },
               opacity: 0.6,
               showlegend: true
+            });
+          }
+
+          // --- Pivotes con ATR ---
+          const pivotes = detectarPivotes(data);
+          if (pivotes.length > 0) {
+            traces.push({
+              x: pivotes.map(p => new Date(p.timestamp)),
+              y: pivotes.map(p => p.close),
+              mode: 'markers+text',
+              type: 'scatter',
+              name: 'Pivotes ATR',
+              text: pivotes.map((p, i) => p.type === 'high' ? `▲${i}` : `▼${i}`),
+              textposition: 'top center',
+              marker: { color: 'white', size: 8, symbol: 'diamond' },
+              visible: 'legendonly'
             });
           }
 
