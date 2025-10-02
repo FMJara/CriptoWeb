@@ -81,7 +81,17 @@
               mode: 'lines',
               name: `Precio ${symbol.toUpperCase()}/USDT`,
               line: { color: '#00BFFF', width: 2 }
-            }
+            },
+            { x, y: data.map(d => d.tenkan), type: 'scatter', mode: 'lines', name: 'TENKAN', line: { color: 'blue' } },
+            { x, y: data.map(d => d.kijun), type: 'scatter', mode: 'lines', name: 'KIJUN', line: { color: 'green' } },
+            { x, y: data.map(d => d.senkou_a), type: 'scatter', mode: 'lines', name: 'SENKOU A', line: { color: 'orange' } },
+            { x, y: data.map(d => d.senkou_b), type: 'scatter', mode: 'lines', name: 'SENKOU B', line: { color: 'brown' } },
+            { x, y: data.map(d => d.vwap), type: 'scatter', mode: 'lines', name: 'VWAP', line: { color: 'purple' } },
+            { x, y: data.map(d => d.sma_50), type: 'scatter', mode: 'lines', name: 'SMA 50', line: { color: 'cyan' } },
+            { x, y: data.map(d => d.sma_200), type: 'scatter', mode: 'lines', name: 'SMA 200', line: { color: 'magenta' } },
+            { x, y: data.map(d => d.rsi), type: 'scatter', mode: 'lines', name: 'RSI', line: { color: 'yellow' } },
+            { x, y: data.map(d => d.atr), type: 'scatter', mode: 'lines', name: 'ATR', line: { color: 'red' } },
+            { x, y: data.map(d => d.ewo), type: 'scatter', mode: 'lines', name: 'EWO', line: { color: 'lime' } }
           ];
 
           // --- Calcular score actual ---
@@ -140,7 +150,7 @@
               futurePointsC.push({ x: nextTime, y: priceC });
               futurePointsA.push({ x: nextTime, y: priceA });
             }
-
+           
             traces.push({
               x: futurePointsC.map(p => p.x),
               y: futurePointsC.map(p => p.y),
