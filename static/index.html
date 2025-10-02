@@ -82,8 +82,11 @@
             { x, y: data.map(d => d.ewo), type: 'scatter', mode: 'lines', name: 'EWO', line: { color: 'lime' }, visible: 'legendonly' }
           ];
 
-          // Proyección futura enriquecida
+          // Proyección técnica basada en pendiente real + señales
           const last = data[data.length - 1];
+          const close = last.close;
+          const lastTimestamp = new Date(last.timestamp);
+
           const atr = last.atr;
           const rsi = last.rsi;
           const ewo = last.ewo;
@@ -92,7 +95,6 @@
           const sma50 = last.sma_50;
           const sma200 = last.sma_200;
           const vwap = last.vwap;
-          const close = last.close;
           const senkou_a = last.senkou_a;
           const senkou_b = last.senkou_b;
 
@@ -105,20 +107,27 @@
           if (close < vwap && rsi < 40) bearish++;
 
           const direction = bullish > bearish ? 1 : bullish < bearish ? -1 : 0;
-          const color = direction === 1 ? 'rgba(0,255,0,0.5)' : direction === -1 ? 'rgba(255,0,0,0.5)' : 'rgba(128,128,128,0.5)';
-          const dash = 'dot';
+
+          const lastPrices = data.slice(-10).map(d => d.close);
+          const deltas = lastPrices.map((p, i, arr) => i > 0 ? p - arr[i - 1] : 0);
+          const avgDelta = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+
+          let adjustment = 1;
+          if (bullish > bearish) adjustment = 1.2;
+          else if (bearish > bullish) adjustment = 0.8;
+
+          const adjustedDelta = avgDelta * adjustment * direction;
+
+          const color = direction === 1 ? 'rgba(0,150,0,0.5)' :
+                        direction === -1 ? 'rgba(150,0,0,0.5)' :
+                        'rgba(100,100,100,0.5)';
 
           const futurePoints = [];
-          const lastTimestamp = new Date(last.timestamp);
           let projectedPrice = close;
-          const atrTrend = data.slice(-5).map(d => d.atr);
-          const atrRising = atrTrend[4] > atrTrend[0];
-          const step = atr * (atrRising ? 1.5 : 1) * direction;
-
           for (let i = 1; i <= 6; i++) {
             const nextTime = new Date(lastTimestamp);
             nextTime.setHours(nextTime.getHours() + i);
-            projectedPrice += step;
+            projectedPrice += adjustedDelta;
             futurePoints.push({ x: nextTime, y: projectedPrice });
           }
 
@@ -128,7 +137,7 @@
             type: 'scatter',
             mode: 'lines',
             name: 'Proyección técnica',
-            line: { color, dash, width: 2 },
+            line: { color, dash: 'dot', width: 2 },
             opacity: 0.6,
             showlegend: true
           });
@@ -154,10 +163,13 @@
             alertBox.style.margin = "10px auto";
             alertBox.style.width = "80%";
             alertBox.style.borderRadius = "8px";
+            alertBox.style.fontSize = "16px";
+            alertBox.style.textAlign = "left";
             alertBox.innerHTML = `<h3>📊 Señales detectadas:</h3><ul>${alerts.map(a => `<li>${a}</li>`).join("")}</ul>`;
             document.body.appendChild(alertBox);
           }
         });
     }
   </script>
-</body
+</body>
+</html>
