@@ -52,7 +52,6 @@
         .then(response => {
           const data = response.data;
           const alerts = response.alerts;
-          const lastUpdated = response.last_updated;
 
           if (!data || data.length === 0) {
             document.getElementById("chartContainer").innerHTML = "No hay datos disponibles para esta cripto.";
@@ -71,10 +70,10 @@
               name: `Precio ${symbol.toUpperCase()}/USDT`,
               line: { color: '#00BFFF', width: 2 }
             },
-            { x, y: data.map(d => d.tenkan), type: 'scatter', mode: 'lines', name: 'Tenkan', line: { color: 'blue' }, visible: 'legendonly' },
-            { x, y: data.map(d => d.kijun), type: 'scatter', mode: 'lines', name: 'Kijun', line: { color: 'green' }, visible: 'legendonly' },
-            { x, y: data.map(d => d.senkou_a), type: 'scatter', mode: 'lines', name: 'Senkou A', line: { color: 'orange' }, visible: 'legendonly' },
-            { x, y: data.map(d => d.senkou_b), type: 'scatter', mode: 'lines', name: 'Senkou B', line: { color: 'brown' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.tenkan), type: 'scatter', mode: 'lines', name: 'TENKAN', line: { color: 'blue' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.kijun), type: 'scatter', mode: 'lines', name: 'KIJUN', line: { color: 'green' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.senkou_a), type: 'scatter', mode: 'lines', name: 'SENKOU A', line: { color: 'orange' }, visible: 'legendonly' },
+            { x, y: data.map(d => d.senkou_b), type: 'scatter', mode: 'lines', name: 'SENKOU B', line: { color: 'brown' }, visible: 'legendonly' },
             { x, y: data.map(d => d.vwap), type: 'scatter', mode: 'lines', name: 'VWAP', line: { color: 'purple' }, visible: 'legendonly' },
             { x, y: data.map(d => d.sma_50), type: 'scatter', mode: 'lines', name: 'SMA 50', line: { color: 'cyan' }, visible: 'legendonly' },
             { x, y: data.map(d => d.sma_200), type: 'scatter', mode: 'lines', name: 'SMA 200', line: { color: 'magenta' }, visible: 'legendonly' },
@@ -83,7 +82,7 @@
             { x, y: data.map(d => d.ewo), type: 'scatter', mode: 'lines', name: 'EWO', line: { color: 'lime' }, visible: 'legendonly' }
           ];
 
-          // Proyección futura basada en lógica enriquecida
+          // Proyección futura enriquecida
           const last = data[data.length - 1];
           const atr = last.atr;
           const rsi = last.rsi;
@@ -98,7 +97,6 @@
           const senkou_b = last.senkou_b;
 
           let bullish = 0, bearish = 0;
-
           if (tenkan > kijun) bullish++; else bearish++;
           if (rsi > 50) bullish++; else bearish++;
           if (ewo > 0) bullish++; else bearish++;
@@ -159,4 +157,7 @@
             alertBox.innerHTML = `<h3>📊 Señales detectadas:</h3><ul>${alerts.map(a => `<li>${a}</li>`).join("")}</ul>`;
             document.body.appendChild(alertBox);
           }
-
+        });
+    }
+  </script>
+</body
