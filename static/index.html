@@ -8,41 +8,77 @@
 <body style="background-color:#111; color:white; font-family:sans-serif; text-align:center;">
   <h2>Crypto Ichimoku Dashboard</h2>
 
-  <label for="cryptoSelect">Selecciona una cripto:</label>
-  <select id="cryptoSelect">
-    <option value="xrp">XRP</option>
-    <option value="xlm">XLM</option>
-    <option value="hbar">HBAR</option>
-    <option value="dovu">DOVU</option>
-    <option value="xdc">XDC</option>
-    <option value="shx">SHX</option>
-    <option value="velo">VELO</option>
-    <option value="xdb">XDB</option>
-    <option value="xpl">XPL</option>
-    <option value="doge">DOGE</option>
-    <option value="zbcn">ZBCN</option>
-    <option value="paw">PAW</option>
-    <option value="dag">DAG</option>
-    <option value="xpr">XPR</option>
-    <option value="qubic">QUBIC</option>
-  </select>
+  <div style="margin:10px;">
+    <label for="cryptoSelect">Selecciona una cripto:</label>
+    <select id="cryptoSelect">
+      <option value="xrp" selected>XRP</option>
+      <option value="xlm">XLM</option>
+      <option value="hbar">HBAR</option>
+      <option value="dovu">DOVU</option>
+      <option value="xdc">XDC</option>
+      <option value="shx">SHX</option>
+      <option value="velo">VELO</option>
+      <option value="xdb">XDB</option>
+      <option value="xpl">XPL</option>
+      <option value="doge">DOGE</option>
+      <option value="zbcn">ZBCN</option>
+      <option value="paw">PAW</option>
+      <option value="dag">DAG</option>
+      <option value="xpr">XPR</option>
+      <option value="qubic">QUBIC</option>
+    </select>
 
-  <label for="timeframeSelect" style="margin-left:20px;">Timeframe:</label>
-  <select id="timeframeSelect">
-    <option value="1h">1H</option>
-    <option value="1d">1D</option>
-  </select>
+    <label for="timeframeSelect" style="margin-left:20px;">Timeframe:</label>
+    <select id="timeframeSelect">
+      <option value="1h" selected>1H</option>
+      <option value="1d">1D</option>
+    </select>
+
+    <button id="infoBtn" style="margin-left:20px; padding:6px 10px;">Info</button>
+  </div>
+
+  <div id="infoPanel" style="display:none; width:80%; margin:10px auto; text-align:left; background:#1a1a1a; padding:12px; border-radius:8px;">
+    <h3 style="margin-top:0;">Indicadores y reglas de señales</h3>
+    <ul>
+      <li><b>Ichimoku:</b> Tenkan/Kijun, nube adelantada (Senkou A/B), Chikou (-26). Señales: cruces, precio vs nube, color de nube, confirmación Chikou.</li>
+      <li><b>SMA 50/200:</b> Golden Cross (50 > 200) = alcista; Death Cross (50 < 200) = bajista.</li>
+      <li><b>ATR:</b> Mide volatilidad. ATR alto = mercado volátil; ATR bajo = mercado plano. Stops dinámicos ≈ 1.5–3 × ATR.</li>
+      <li><b>RSI:</b> >70 sobrecompra, <30 sobreventa, >50 momentum alcista, <50 momentum bajista. Divergencias anticipan giros.</li>
+      <li><b>Proyecciones:</b> Solo si efectividad ≥ 60%.</li>
+      <li><b>Ondas Elliott:</b> Impulso 1–5 con reglas base; corrección A–B–C simplificada.</li>
+      <li><b>Otros indicadores comunes:</b> MACD, StochRSI y Bandas de Bollinger complementan RSI y MAs para leer impulso y volatilidad.</li>
+    </ul>
+  </div>
 
   <div id="chartContainer" style="width:90%; margin:auto; height:600px;"></div>
 
   <script>
     const cryptoSelect = document.getElementById("cryptoSelect");
     const timeframeSelect = document.getElementById("timeframeSelect");
+    const infoBtn = document.getElementById("infoBtn");
+    infoBtn.onclick = () => {
+      const p = document.getElementById('infoPanel');
+      p.style.display = p.style.display === 'none' ? 'block' : 'none';
+    };
 
     cryptoSelect.addEventListener("change", () => loadChart());
     timeframeSelect.addEventListener("change", () => loadChart());
     window.onload = () => loadChart();
 
+    // Utilidades de tiempo
+    function periodHours(tf) { return tf === '1d' ? 24 : 1; }
+    function addHours(date, h) { const d = new Date(date); d.setHours(d.getHours() + h); return d; }
+    function subHours(date, h) { const d = new Date(date); d.setHours(d.getHours() - h); return d; }
+
+    // Perfiles por timeframe/activo
+    const perfiles = {
+      "1h": { lookback: 5, atrMult: 0.5, fibTol: 0.30, rsiOver: 80, rsiUnder: 20 },
+      "1d": { lookback: 7, atrMult: 0.7, fibTol: 0.25, rsiOver: 70, rsiUnder: 30 },
+      "DOGE": { lookback: 8, atrMult: 1.0, fibTol: 0.35, rsiOver: 80, rsiUnder: 20 },
+      "XRP": { lookback: 5, atrMult: 0.5, fibTol: 0.25, rsiOver: 70, rsiUnder: 30 }
+    };
+
+    // Score simple
     function calcularScore(d) {
       let score = 0;
       if (d.tenkan > d.kijun) score += 1.5;
@@ -55,7 +91,128 @@
       return score;
     }
 
-    // --- Detectar pivotes con ATR ---
+    // Tendencia base
+    function inferirTendencia(d) {
+      const last = d[d.length - 1];
+      const enNube = (last.close <= last.senkou_a && last.close >= last.senkou_b) ||
+                     (last.close >= last.senkou_a && last.close <= last.senkou_b);
+      if (last.sma_50 > last.sma_200 && last.close > last.sma_50 && last.close > last.senkou_a && last.close > last.senkou_b) return 'alcista';
+      if (last.sma_50 < last.sma_200 && last.close < last.sma_50 && last.close < last.senkou_a && last.close < last.senkou_b) return 'bajista';
+      return enNube ? 'rango' : (last.sma_50 >= last.sma_200 ? 'alcista' : 'bajista');
+    }
+
+    // Swings filtrados por ATR
+    function detectarSwings(data, lookback=5, atrMult=0.5) {
+      const highs = [], lows = [];
+      for (let i = lookback; i < data.length - lookback; i++) {
+        const slice = data.slice(i - lookback, i + lookback + 1);
+        const max = Math.max(...slice.map(d => d.close));
+        const min = Math.min(...slice.map(d => d.close));
+        const atr = data[i].atr;
+        if (data[i].close === max && (max - min) > atr * atrMult) highs.push({ idx:i, ...data[i] });
+        if (data[i].close === min && (max - min) > atr * atrMult) lows.push({ idx:i, ...data[i] });
+      }
+      return { highs, lows };
+    }
+
+    // Alternancia temporal
+    function alternarSwings(swings, tendencia) {
+      const { highs, lows } = swings;
+      const piv = [...highs, ...lows].sort((a,b) => a.idx - b.idx);
+      const alt = [];
+      let expect = (tendencia === 'alcista') ? 'low' : 'high';
+      for (const p of piv) {
+        const isHigh = !!highs.find(h => h.idx === p.idx);
+        const type = isHigh ? 'high' : 'low';
+        if (type === expect) {
+          alt.push({ ...p, type });
+          expect = expect === 'low' ? 'high' : 'low';
+        }
+      }
+      return alt;
+    }
+
+    // Validación impulso 1–5 con reglas y proporciones
+    function validarImpulso(cand, tendencia, fibTol=0.30) {
+      if (cand.length < 6) return null;
+      const c = cand.slice(-6);
+      const segs = [];
+      for (let i = 1; i < c.length; i++) segs.push(c[i].close - c[i-1].close);
+
+      const signoOK = (tendencia === 'alcista')
+        ? (segs[0]>0 && segs[1]<0 && segs[2]>0 && segs[3]<0 && segs[4]>0)
+        : (segs[0]<0 && segs[1]>0 && segs[2]<0 && segs[3]>0 && segs[4]<0);
+      if (!signoOK) return null;
+
+      const abs = segs.map(v => Math.abs(v));
+      const [onda1, onda2, onda3, onda4, onda5] = abs;
+
+      const inicio1 = c[0].close, fin1 = c[1].close;
+      const rango1Min = Math.min(inicio1, fin1), rango1Max = Math.max(inicio1, fin1);
+      const solapa4 = (c[4].close >= rango1Min && c[4].close <= rango1Max);
+      const retro2Borra1 = (tendencia === 'alcista') ? (c[2].close <= c[0].close) : (c[2].close >= c[0].close);
+      const tresMasCorta = (onda3 <= Math.min(onda1, onda2));
+      if (retro2Borra1 || tresMasCorta || solapa4) return null;
+
+      const tol = fibTol;
+      const ratio2 = onda2 / onda1;
+      const ratio3 = onda3 / onda1;
+      const ratio4 = onda4 / onda3;
+      const ok2 = (ratio2 >= 0.5*(1-tol) && ratio2 <= 0.854*(1+tol));
+      const ok3 = (ratio3 >= 1.618*(1-tol));
+      const ok4 = (ratio4 <= 0.382*(1+tol));
+      const ok5 = (Math.abs(onda5 - onda1) <= onda1*tol) || (onda5 <= (onda1+onda3)*0.618*(1+tol));
+      if (!(ok2 && ok3 && ok4 && ok5)) return null;
+
+      return [
+        { ...c[1], label:1 }, { ...c[2], label:2 },
+        { ...c[3], label:3 }, { ...c[4], label:4 },
+        { ...c[5], label:5 }
+      ];
+    }
+
+    function etiquetarImpulso(swings, tendencia, fibTol) {
+      const alt = alternarSwings(swings, tendencia);
+      if (alt.length < 6) return [];
+      for (let k = alt.length; k >= 6; k--) {
+        const cand = alt.slice(k-6, k);
+        const v = validarImpulso(cand, tendencia, fibTol);
+        if (v) return v;
+      }
+      return [];
+    }
+
+    function etiquetarCorreccion(data, impulso, tendencia) {
+      if (impulso.length !== 5) return [];
+      const startIdx = impulso[4].idx ?? data.findIndex(d => d.timestamp === impulso[4].timestamp);
+      if (startIdx < 0) return [];
+      const tail = data.slice(startIdx);
+      if (tail.length < 5) return [];
+
+      const base = tail[0];
+      const isUp = (tendencia === 'alcista');
+      const A = tail.find((d, i) => i>0 && (isUp ? d.close < base.close : d.close > base.close));
+      if (!A) return [];
+      const idxA = data.findIndex(d => d.timestamp === A.timestamp);
+      const B = data.slice(idxA).find((d, i) => i>0 && (isUp ? d.close > A.close : d.close < A.close));
+      if (!B) return [];
+      const idxB = data.findIndex(d => d.timestamp === B.timestamp);
+      const C = data.slice(idxB).find((d, i) => i>0 && (isUp ? d.close < A.close : d.close > A.close));
+      if (!C) return [];
+
+      const tol = 0.30;
+      const lenA = Math.abs(A.close - base.close);
+      const lenB = Math.abs(B.close - A.close);
+      const lenC = Math.abs(C.close - B.close);
+      const rB = lenB / lenA;
+      const rC = lenC / lenA;
+      const okB = (rB >= 0.5*(1-tol) && rB <= 0.854*(1+tol));
+      const okC = (rC >= 0.618*(1-tol) && rC <= 1.618*(1+tol));
+      if (!(okB && okC)) return [];
+
+      return [{ ...A, label:'A' }, { ...B, label:'B' }, { ...C, label:'C' }];
+    }
+
     function detectarPivotes(data, lookback=5) {
       const pivotes = [];
       for (let i = lookback; i < data.length - lookback; i++) {
@@ -63,40 +220,58 @@
         const max = Math.max(...slice.map(d => d.close));
         const min = Math.min(...slice.map(d => d.close));
         const atr = data[i].atr;
-        if (data[i].close === max && (max - min) > atr * 0.5) {
-          pivotes.push({ type: 'high', ...data[i] });
-        }
-        if (data[i].close === min && (max - min) > atr * 0.5) {
-          pivotes.push({ type: 'low', ...data[i] });
-        }
+        if (data[i].close === max && (max - min) > atr * 0.5) pivotes.push({ type: 'high', ...data[i] });
+        if (data[i].close === min && (max - min) > atr * 0.5) pivotes.push({ type: 'low', ...data[i] });
       }
       return pivotes;
     }
 
-    // --- Conteo básico de ondas Elliott ---
-    function contarOndas(pivotes) {
-      const ondas = [];
-      let label = 1;
-      for (let i = 0; i < pivotes.length; i++) {
-        ondas.push({ ...pivotes[i], label });
-        if (label === 5) label = 'A';
-        else if (label === 'A') label = 'B';
-        else if (label === 'B') label = 'C';
-        else if (label === 'C') label = 1;
-        else label++;
+    // RSI: detectar divergencia básica (últimos dos máximos/mínimos)
+    function detectarDivergenciaRSI(data) {
+      if (data.length < 30) return null;
+      // Busca dos últimos máximos y mínimos de precio (simples)
+      const closes = data.map(d => d.close);
+      const rsis = data.map(d => d.rsi);
+      function lastTwoHighs(arr) {
+        const highs = [];
+        for (let i = 2; i < arr.length-2; i++) {
+          if (arr[i] > arr[i-1] && arr[i] > arr[i-2] && arr[i] > arr[i+1] && arr[i] > arr[i+2]) highs.push(i);
+        }
+        return highs.slice(-2);
       }
-      return ondas;
+      function lastTwoLows(arr) {
+        const lows = [];
+        for (let i = 2; i < arr.length-2; i++) {
+          if (arr[i] < arr[i-1] && arr[i] < arr[i-2] && arr[i] < arr[i+1] && arr[i] < arr[i+2]) lows.push(i);
+        }
+        return lows.slice(-2);
+      }
+      const hIdx = lastTwoHighs(closes);
+      const lIdx = lastTwoLows(closes);
+      if (hIdx.length === 2) {
+        const priceHigherHigh = closes[hIdx[1]] > closes[hIdx[0]];
+        const rsiLowerHigh = rsis[hIdx[1]] < rsis[hIdx[0]];
+        if (priceHigherHigh && rsiLowerHigh) return 'Divergencia bajista RSI (HH en precio, LH en RSI)';
+      }
+      if (lIdx.length === 2) {
+        const priceLowerLow = closes[lIdx[1]] < closes[lIdx[0]];
+        const rsiHigherLow = rsis[lIdx[1]] > rsis[lIdx[0]];
+        if (priceLowerLow && rsiHigherLow) return 'Divergencia alcista RSI (LL en precio, HL en RSI)';
+      }
+      return null;
     }
 
     function loadChart() {
       const symbol = cryptoSelect.value;
       const timeframe = timeframeSelect.value;
+      const periodH = periodHours(timeframe);
+      const perfil = perfiles[symbol.toUpperCase()] || perfiles[timeframe] || { lookback:5, atrMult:0.5, fibTol:0.3, rsiOver:70, rsiUnder:30 };
 
       fetch(`/api/${symbol}_data?timeframe=${timeframe}`)
         .then(res => res.json())
         .then(response => {
           const data = response.data;
-          const alerts = response.alerts;
+          let alerts = response.alerts || [];
 
           if (!data || data.length === 0) {
             document.getElementById("chartContainer").innerHTML = "No hay datos disponibles para esta cripto.";
@@ -106,19 +281,20 @@
           const x = data.map(d => new Date(d.timestamp));
           const price = data.map(d => d.close);
 
+          // Ichimoku shifts
+          const shiftForwardHours = 26 * periodH;
+          const shiftBackwardHours = 26 * periodH;
+          const xSenkou = x.map(ts => addHours(ts, shiftForwardHours));
+          const xChikou = x.map(ts => subHours(ts, shiftBackwardHours));
+          const chikou = data.map(d => d.close);
+
           const traces = [
-            {
-              x,
-              y: price,
-              type: 'scatter',
-              mode: 'lines',
-              name: `Precio ${symbol.toUpperCase()}/USDT`,
-              line: { color: '#00BFFF', width: 2 }
-            },
+            { x, y: price, type: 'scatter', mode: 'lines', name: `Precio ${symbol.toUpperCase()}/USDT`, line: { color: '#00BFFF', width: 2 } },
             { x, y: data.map(d => d.tenkan), type: 'scatter', mode: 'lines', name: 'TENKAN', line: { color: 'blue' }, visible: 'legendonly' },
             { x, y: data.map(d => d.kijun), type: 'scatter', mode: 'lines', name: 'KIJUN', line: { color: 'green' }, visible: 'legendonly' },
-            { x, y: data.map(d => d.senkou_a), type: 'scatter', mode: 'lines', name: 'SENKOU A', line: { color: 'orange' }, visible: 'legendonly' },
-            { x, y: data.map(d => d.senkou_b), type: 'scatter', mode: 'lines', name: 'SENKOU B', line: { color: 'brown' }, visible: 'legendonly' },
+            { x: xSenkou, y: data.map(d => d.senkou_a), type: 'scatter', mode: 'lines', name: 'SENKOU A (+26)', line: { color: 'orange' }, visible: 'legendonly' },
+            { x: xSenkou, y: data.map(d => d.senkou_b), type: 'scatter', mode: 'lines', name: 'SENKOU B (+26)', line: { color: 'brown' }, fill: 'tonexty', visible: 'legendonly' },
+            { x: xChikou, y: chikou, type: 'scatter', mode: 'lines', name: 'CHIKOU (-26)', line: { color: '#AAAAAA', dash: 'dash' }, visible: 'legendonly' },
             { x, y: data.map(d => d.vwap), type: 'scatter', mode: 'lines', name: 'VWAP', line: { color: 'purple' }, visible: 'legendonly' },
             { x, y: data.map(d => d.sma_50), type: 'scatter', mode: 'lines', name: 'SMA 50', line: { color: 'cyan' }, visible: 'legendonly' },
             { x, y: data.map(d => d.sma_200), type: 'scatter', mode: 'lines', name: 'SMA 200', line: { color: 'magenta' }, visible: 'legendonly' },
@@ -127,15 +303,14 @@
             { x, y: data.map(d => d.ewo), type: 'scatter', mode: 'lines', name: 'EWO', line: { color: 'lime' }, visible: 'legendonly' }
           ];
 
-          // --- Score actual ---
+          // Score y dirección
           const last = data[data.length - 1];
+          const n = data.length;
           const score = calcularScore(last);
-
           let direction = 0;
-          if (score > 1.5) direction = 1;
-          else if (score < -1.5) direction = -1;
+          if (score > 1.5) direction = 1; else if (score < -1.5) direction = -1;
 
-          // --- Simulación de efectividad ---
+          // Efectividad histórica
           let aciertos = 0, total = 0;
           for (let i = 20; i < data.length - 6; i++) {
             const s = calcularScore(data[i]);
@@ -150,7 +325,7 @@
           }
           const efectividad = total > 0 ? Math.round((aciertos / total) * 100) : 0;
 
-          // --- Proyección ---
+          // Proyección si efectividad ≥ 60%
           if (direction !== 0 && efectividad >= 60) {
             const lastTimestamp = new Date(last.timestamp);
             const lastPrices = data.slice(-10).map(d => d.close);
@@ -161,24 +336,15 @@
             const adjustedDeltaC = avgDelta * direction * deltaFactor;
             const adjustedDeltaA = avgDelta * direction * deltaFactor * 1.5;
 
-            const colorC = direction === 1 ? 'rgba(0,100,0,0.4)' :
-                           direction === -1 ? 'rgba(100,0,0,0.4)' :
-                           'rgba(80,80,80,0.4)';
+            const colorC = direction === 1 ? 'rgba(0,100,0,0.4)' : 'rgba(100,0,0,0.4)';
+            const colorA = direction === 1 ? 'rgba(0,200,0,0.6)' : 'rgba(200,0,0,0.6)';
 
-            const colorA = direction === 1 ? 'rgba(0,200,0,0.6)' :
-                           direction === -1 ? 'rgba(200,0,0,0.6)' :
-                           'rgba(150,150,150,0.6)';
-
-            const futurePointsC = [];
-            const futurePointsA = [];
-            let priceC = last.close;
-            let priceA = last.close;
+            const futurePointsC = [], futurePointsA = [];
+            let priceC = last.close, priceA = last.close;
 
             for (let i = 1; i <= 6; i++) {
-              const nextTime = new Date(lastTimestamp);
-              nextTime.setHours(nextTime.getHours() + i);
-              priceC += adjustedDeltaC;
-              priceA += adjustedDeltaA;
+              const nextTime = addHours(lastTimestamp, i * periodH);
+              priceC += adjustedDeltaC; priceA += adjustedDeltaA;
               futurePointsC.push({ x: nextTime, y: priceC });
               futurePointsA.push({ x: nextTime, y: priceA });
             }
@@ -186,28 +352,24 @@
             traces.push({
               x: futurePointsC.map(p => p.x),
               y: futurePointsC.map(p => p.y),
-              type: 'scatter',
-              mode: 'lines',
+              type: 'scatter', mode: 'lines',
               name: 'Proyección conservadora',
               line: { color: colorC, dash: 'dot', width: 2, shape: 'spline' },
-              opacity: 0.5,
-              showlegend: true
+              opacity: 0.5, showlegend: true
             });
 
             traces.push({
               x: futurePointsA.map(p => p.x),
               y: futurePointsA.map(p => p.y),
-              type: 'scatter',
-              mode: 'lines',
+              type: 'scatter', mode: 'lines',
               name: 'Proyección agresiva',
               line: { color: colorA, dash: 'dot', width: 2, shape: 'spline' },
-              opacity: 0.6,
-              showlegend: true
+              opacity: 0.6, showlegend: true
             });
           }
 
-          // --- Pivotes con ATR ---
-          const pivotes = detectarPivotes(data);
+          // Pivotes ATR (legendonly)
+          const pivotes = detectarPivotes(data, perfil.lookback);
           if (pivotes.length > 0) {
             traces.push({
               x: pivotes.map(p => new Date(p.timestamp)),
@@ -220,21 +382,94 @@
               marker: { color: 'white', size: 8, symbol: 'diamond' },
               visible: 'legendonly'
             });
+          }
 
-            // --- Ondas Elliott básicas ---
-            const ondas = contarOndas(pivotes);
+          // Ondas Elliott (legendonly)
+          const tendencia = inferirTendencia(data);
+          const swings = detectarSwings(data, perfil.lookback, perfil.atrMult);
+          const impulso = etiquetarImpulso(swings, tendencia, perfil.fibTol);
+          const correccion = etiquetarCorreccion(data, impulso, tendencia);
+
+          if (impulso.length === 5) {
             traces.push({
-              x: ondas.map(o => new Date(o.timestamp)),
-              y: ondas.map(o => o.close),
+              x: impulso.map(o => new Date(o.timestamp)),
+              y: impulso.map(o => o.close),
               mode: 'markers+text',
               type: 'scatter',
-              name: 'Ondas Elliott',
-              text: ondas.map(o => o.label),
+              name: 'Ondas Elliott (1–5)',
+              text: impulso.map(o => o.label),
               textposition: 'bottom center',
               marker: { color: 'gold', size: 10, symbol: 'circle' },
               visible: 'legendonly'
             });
           }
+          if (correccion.length === 3) {
+            traces.push({
+              x: correccion.map(o => new Date(o.timestamp)),
+              y: correccion.map(o => o.close),
+              mode: 'markers+text',
+              type: 'scatter',
+              name: 'Corrección A–B–C',
+              text: correccion.map(o => o.label),
+              textposition: 'bottom center',
+              marker: { color: 'orange', size: 10, symbol: 'square' },
+              visible: 'legendonly'
+            });
+          }
+
+          // Señales Ichimoku
+          if (n >= 2) {
+            const prev = data[n-2];
+            const prevTK = prev.tenkan - prev.kijun;
+            const currTK = last.tenkan - last.kijun;
+            if (prevTK <= 0 && currTK > 0) alerts.push('Cruce alcista Tenkan/Kijun');
+            if (prevTK >= 0 && currTK < 0) alerts.push('Cruce bajista Tenkan/Kijun');
+
+            const prevPK = prev.close - prev.kijun;
+            const currPK = last.close - last.kijun;
+            if (prevPK <= 0 && currPK > 0) alerts.push('Precio rompe por encima de Kijun');
+            if (prevPK >= 0 && currPK < 0) alerts.push('Precio cae por debajo de Kijun');
+
+            const prevCloudUp = prev.senkou_a > prev.senkou_b;
+            const currCloudUp = last.senkou_a > last.senkou_b;
+            if (!prevCloudUp && currCloudUp) alerts.push('Nube cambia a alcista (Span A > Span B)');
+            if (prevCloudUp && !currCloudUp) alerts.push('Nube cambia a bajista (Span A < Span B)');
+
+            const idxChik = n - 1 - 26;
+            if (idxChik >= 0) {
+              const pastPrice = data[idxChik].close;
+              if (pastPrice && last.close > pastPrice) alerts.push('Chikou por encima del precio histórico (confirmación alcista)');
+              if (pastPrice && last.close < pastPrice) alerts.push('Chikou por debajo del precio histórico (confirmación bajista)');
+            }
+          }
+
+          // Alertas SMA (Golden/Death Cross)
+          if (n >= 2) {
+            const prevGC = data[n-2].sma_50 - data[n-2].sma_200;
+            const currGC = last.sma_50 - last.sma_200;
+            if (prevGC <= 0 && currGC > 0) alerts.push('Golden Cross detectado (SMA50 > SMA200)');
+            if (prevGC >= 0 && currGC < 0) alerts.push('Death Cross detectado (SMA50 < SMA200)');
+          }
+
+          // Alertas ATR (volatilidad alta/baja)
+          const atrVals = data.slice(-20).map(d => d.atr);
+          if (atrVals.length >= 5) {
+            const atrAvg = atrVals.reduce((a,b)=>a+b,0)/atrVals.length;
+            if (last.atr > atrAvg * 1.3) alerts.push('ATR en aumento (volatilidad alta, posibles rupturas)');
+            if (last.atr < atrAvg * 0.7) alerts.push('ATR bajo (mercado plano, riesgo de señales falsas)');
+          }
+
+          // Alertas RSI (sobrecompra/sobreventa, cruce 50, divergencias)
+          const rsiOver = perfil.rsiOver, rsiUnder = perfil.rsiUnder;
+          if (last.rsi >= rsiOver) alerts.push(`RSI en sobrecompra (>${rsiOver})`);
+          if (last.rsi <= rsiUnder) alerts.push(`RSI en sobreventa (<${rsiUnder})`);
+          if (n >= 2) {
+            const prevRSI = data[n-2].rsi;
+            if (prevRSI <= 50 && last.rsi > 50) alerts.push('RSI rompe por encima de 50 (momentum alcista)');
+            if (prevRSI >= 50 && last.rsi < 50) alerts.push('RSI cae por debajo de 50 (momentum bajista)');
+          }
+          const divMsg = detectarDivergenciaRSI(data);
+          if (divMsg) alerts.push(divMsg);
 
           const layout = {
             title: `${symbol.toUpperCase()} Indicadores Técnicos (${timeframe})`,
@@ -245,7 +480,7 @@
 
           Plotly.newPlot('chartContainer', traces, layout);
 
-          // --- Mostrar efectividad ---
+          // Efectividad
           const oldEff = document.getElementById("effBox");
           if (oldEff) oldEff.remove();
           const effBox = document.createElement("div");
@@ -255,10 +490,9 @@
           effBox.innerHTML = `📈 Efectividad histórica estimada: <b>${efectividad}%</b>`;
           document.body.appendChild(effBox);
 
-          // --- Mostrar alertas ---
+          // Alertas
           const oldAlert = document.getElementById("alertBox");
           if (oldAlert) oldAlert.remove();
-
           if (alerts && alerts.length > 0) {
             const alertBox = document.createElement("div");
             alertBox.id = "alertBox";
