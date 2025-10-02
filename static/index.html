@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Crypto Ichimoku Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.1.min.js"></script>
+</head>
+<body style="background-color:#111; color:white; font-family:sans-serif; text-align:center;">
+  <h2>Crypto Ichimoku Dashboard</h2>
+
+  <label for="cryptoSelect">Selecciona una cripto:</label>
+  <select id="cryptoSelect">
+    <option value="xrp">XRP</option>
+    <option value="xlm">XLM</option>
+    <option value="hbar">HBAR</option>
+    <option value="dovu">DOVU</option>
+    <option value="xdc">XDC</option>
+    <option value="shx">SHX</option>
+    <option value="velo">VELO</option>
+    <option value="xdb">XDB</option>
+    <option value="xpl">XPL</option>
+    <option value="doge">DOGE</option>
+    <option value="zbcn">ZBCN</option>
+    <option value="paw">PAW</option>
+    <option value="dag">DAG</option>
+    <option value="xpr">XPR</option>
+    <option value="qubic">QUBIC</option>
+  </select>
+
+  <label for="timeframeSelect" style="margin-left:20px;">Timeframe:</label>
+  <select id="timeframeSelect">
+    <option value="1h">1H</option>
+    <option value="1d">1D</option>
+  </select>
+
+  <div id="chartContainer" style="width:90%; margin:auto; height:600px;"></div>
+
+  <script>
+    const cryptoSelect = document.getElementById("cryptoSelect");
+    const timeframeSelect = document.getElementById("timeframeSelect");
+
+    cryptoSelect.addEventListener("change", () => loadChart());
+    timeframeSelect.addEventListener("change", () => loadChart());
+    window.onload = () => loadChart();
+
+    function calcularScore(d) {
+      let score = 0;
+      if (d.tenkan > d.kijun) score += 1.5;
+      if (d.rsi > 50 && d.rsi < 70) score += 1;
+      if (d.ewo > 0) score += 1.2;
+      if (d.close > d.senkou_a && d.close > d.senkou_b) score += 2;
+      if (d.close > d.sma_50 && d.sma_50 > d.sma_200) score += 2;
+      if (d.rsi > 70) score -= 1; // sobrecompra
+      if (d.rsi < 30) score -= 1; // sobreventa
+      return score;
+    }
+
+    function loadChart() {
+      const symbol = cryptoSelect.value;
+      const timeframe = timeframeSelect.value;
+
+      fetch(`/api/${symbol}_data?timeframe=${timeframe}`)
+        .then(res => res.json())
+        .then(response => {
+          const data = response.data;
+          const alerts = response.alerts;
+
+          if (!data || data.length === 0) {
+            document.getElementById("chartContainer").innerHTML = "No hay datos disponibles para esta cripto.";
+            return;
+          }
+
+          const x = data.map(d => new Date(d.timestamp));
+          const price = data.map(d => d.close);
+
+          const traces = [
+            {
+              x,
+              y: price,
+              type: 'scatter',
+              mode: 'lines',
+              name: `Precio ${symbol.toUpperCase()}/USDT`,
+              line: { color: '#00BFFF', width: 2 }
+            }
+          ];
+
+          // --- Calcular score actual ---
+          const last = data[data.length - 1];
+          const score = calcularScore(last);
+
+          let direction = 0;
+          if (score > 1.5) direction = 1;
+          else if (score < -1.5) direction = -1;
+
+          // --- Simulación de efectividad histórica ---
+          let aciertos = 0, total = 0;
+          for (let i = 20; i < data.length - 6; i++) {
+            const s = calcularScore(data[i]);
+            const dir = s > 1.5 ? 1 : s < -1.5 ? -1 : 0;
+            if (dir !== 0) {
+              const real = data[i + 6].close;
+              const esperado = data[i].close + (data[i+1].close - data[i].close) * dir;
+              const error = Math.abs(real - esperado);
+              if (error < data[i].atr * 1.2) aciertos++;
+              total++;
+            }
+          }
+          const efectividad = total > 0 ? Math.round((aciertos / total) * 100) : 0;
+
+          // --- Proyección solo si efectividad >= 60% ---
+          if (direction !== 0 && efectividad >= 60) {
+            const lastTimestamp = new Date(last.timestamp);
+            const lastPrices = data.slice(-10).map(d => d.close);
+            const deltas = lastPrices.map((p, i, arr) => i > 0 ? p - arr[i - 1] : 0);
+            const avgDelta = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+            const deltaFactor = timeframe === "1d" ? 1.5 : 1;
+
+            // Conservadora
+            const adjustedDeltaC = avgDelta * direction * deltaFactor;
+            const colorC = direction === 1 ? 'rgba(0,100,0,0.4)' :
+                           direction === -1 ? 'rgba(100,0,0,0.4)' :
+                           'rgba(80,80,80,0.4)';
+
+            // Agresiva
+            const adjustedDeltaA = avgDelta * direction * deltaFactor * 1.5;
+            const colorA = direction === 1 ? 'rgba(0,200,0,0.6)' :
+                           direction === -1 ? 'rgba(200,0,0,0.6)' :
+                           'rgba(150,150,150,0.6)';
+
+            const futurePointsC = [];
+            const futurePointsA = [];
+            let priceC = last.close;
+            let priceA = last.close;
+
+            for (let i = 1; i <= 6; i++) {
+              const nextTime = new Date(lastTimestamp);
+              nextTime.setHours(nextTime.getHours() + i);
+              priceC += adjustedDeltaC;
+              priceA += adjustedDeltaA;
+              futurePointsC.push({ x: nextTime, y: priceC });
+              futurePointsA.push({ x: nextTime, y: priceA });
+            }
+
+            traces.push({
+              x: futurePointsC.map(p => p.x),
+              y: futurePointsC.map(p => p.y),
+              type: 'scatter',
+              mode: 'lines',
+              name: 'Proyección conservadora',
+              line: { color: colorC, dash: 'dot', width: 2, shape: 'spline' },
+              opacity: 0.5,
+              showlegend: true
+            });
+
+            traces.push({
+              x: futurePointsA.map(p => p.x),
+              y: futurePointsA.map(p => p.y),
+              type: 'scatter',
+              mode: 'lines',
+              name: 'Proyección agresiva',
+              line: { color: colorA, dash: 'dot', width: 2, shape: 'spline' },
+              opacity: 0.6,
+              showlegend: true
+            });
+          }
+
+          const layout = {
+            title: `${symbol.toUpperCase()} Indicadores Técnicos (${timeframe})`,
+            xaxis: { title: 'Fecha y hora' },
+            yaxis: { title: 'Valor', automargin: true },
+            template: 'plotly_dark'
+          };
+
+          Plotly.newPlot('chartContainer', traces, layout);
+
+          // --- Mostrar efectividad ---
+          const oldEff = document.getElementById("effBox");
+          if (oldEff) oldEff.remove();
+          const effBox = document.createElement("div");
+          effBox.id = "effBox";
+          effBox.style.color = "#aaa";
+          effBox.style.margin = "10px";
+          effBox.innerHTML = `📈 Efectividad histórica estimada: <b>${efectividad}%</b>`;
+          document.body.appendChild(effBox);
+
+          // --- Mostrar alertas ---
+          const oldAlert = document.getElementById("alertBox");
+          if (oldAlert) oldAlert.remove();
+
+          if (alerts && alerts.length > 0) {
+            const alertBox = document.createElement("div");
+            alertBox.id = "alertBox";
+            alertBox.style.background = "#222";
+            alertBox.style.color = "white";
+            alertBox.style.padding = "10px";
+            alertBox.style.margin = "10px auto";
+            alertBox.style.width = "80%";
+            alertBox.style.borderRadius = "8px";
+            alertBox.style.fontSize = "16px";
+            alertBox.style.textAlign = "left";
+            alertBox.innerHTML = `<h3>📊 Señales detectadas:</h3>
+              <ul>${alerts.map(a => `<li>${a}</li>`).join("")}</ul>`;
+            document.body.appendChild(alertBox);
+          }
+        });
+    }
+  </script>
+</body>
+</html>
