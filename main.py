@@ -6,6 +6,7 @@ import ccxt
 
 app = Flask(__name__)
 
+# Configuración de símbolos y timeframes
 CRYPTOS = ["xrp", "xlm", "hbar", "dovu", "xdc", "shx", "velo", "xdb", "xpl", "doge", "zbcn", "paw", "dag", "xpr", "qubic"]
 SYMBOL_MAP = {
     "xrp": "XRP/USDT", "xlm": "XLM/USDT", "hbar": "HBAR/USDT", "dovu": "DOVU/USDT",
@@ -13,23 +14,46 @@ SYMBOL_MAP = {
     "xpl": "XPL/USDT", "doge": "DOGE/USDT", "zbcn": "ZBCN/USDT", "paw": "PAW/USDT",
     "dag": "DAG/USDT", "xpr": "XPR/USDT", "qubic": "QUBIC/USDT"
 }
-
 VALID_TIMEFRAMES = ["1d", "1h"]
-LIMITS = {"1d": 900, "1h": 900}
 
+# Exchange MEXC vía ccxt
 exchange = ccxt.mexc({
     'enableRateLimit': True,
     'timeout': 10000,
     'options': {'adjustForTimeDifference': True}
 })
 
-def fetch_ohlcv_safe(symbol, timeframe='1d', limit=900, max_retries=3):
-    for attempt in range(max_retries):
-        try:
-            return exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-        except Exception:
-            time.sleep(3)
-    return []
+# -----------------------------
+# Utilidades de datos e indicadores
+# -----------------------------
+
+def fetch_ohlcv_paged(symbol, timeframe="1h", target=1000, max_retries=3):
+    """
+    Paginación automática para traer más de 1000 velas.
+    Usa 'since' para avanzar y concatena lotes de hasta 1000.
+    Devuelve exactamente 'target' velas (o menos si no hay histórico suficiente).
+    """
+    all_data = []
+    since = None
+    while len(all_data) < target:
+        batch = []
+        for attempt in range(max_retries):
+            try:
+                batch = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=1000, since=since)
+                break
+            except Exception:
+                time.sleep(2)
+                batch = []
+        if not batch:
+            break
+        all_data.extend(batch)
+        # Avanzamos el cursor 'since' al cierre del último candle + 1 ms
+        since = batch[-1][0] + 1
+        # Si el lote vino incompleto, no hay más páginas
+        if len(batch) < 1000:
+            break
+    # Recortamos al objetivo exacto por si juntamos más
+    return all_data[-target:]
 
 def validate_data(df):
     df.dropna(inplace=True)
@@ -51,7 +75,12 @@ def ichimoku_base_line(high, low, period=26):
 
 def volume_weighted_average_price(high, low, close, volume):
     typical_price = (high + low + close) / 3
-    return (typical_price * volume).cumsum() / volume.cumsum()
+    cum_tp_vol = (typical_price * volume).cumsum()
+    cum_vol = volume.cumsum()
+    # Evitar división por cero
+    cum_vol = cum_vol.replace(0, np.nan)
+    vwap = cum_tp_vol / cum_vol
+    return vwap.fillna(method='ffill').fillna(method='bfill')
 
 def sma_indicator(series, window):
     return series.rolling(window).mean()
@@ -60,10 +89,11 @@ def rsi(series, window):
     delta = series.diff()
     gain = np.where(delta > 0, delta, 0)
     loss = np.where(delta < 0, -delta, 0)
-    avg_gain = pd.Series(gain).rolling(window).mean()
-    avg_loss = pd.Series(loss).rolling(window).mean()
-    rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
+    avg_gain = pd.Series(gain, index=series.index).rolling(window).mean()
+    avg_loss = pd.Series(loss, index=series.index).rolling(window).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    rsi_val = 100 - (100 / (1 + rs))
+    return pd.Series(rsi_val, index=series.index).fillna(50)
 
 def generate_alert(df):
     last = df.iloc[-1]
@@ -90,6 +120,10 @@ def generate_alert(df):
 
     return alerts
 
+# -----------------------------
+# Rutas Flask
+# -----------------------------
+
 @app.route("/")
 def index():
     return send_from_directory("static", "index.html")
@@ -101,28 +135,38 @@ def serve_data(symbol):
     if timeframe not in VALID_TIMEFRAMES:
         timeframe = "1h"
 
-    limit = LIMITS.get(timeframe, 900)
-
     if symbol not in SYMBOL_MAP:
-        return jsonify([])
+        return jsonify({"data": [], "alerts": [], "last_updated": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")})
 
-    raw = fetch_ohlcv_safe(SYMBOL_MAP[symbol], timeframe=timeframe, limit=limit)
+    # Objetivos de histórico fijo
+    if timeframe == "1h":
+        target = 24 * 180   # 6 meses ≈ 4320 velas
+    else:
+        target = 365 * 6    # 6 años ≈ 2190 velas
+
+    # Paginación automática
+    raw = fetch_ohlcv_paged(SYMBOL_MAP[symbol], timeframe=timeframe, target=target)
     if not raw:
-        return jsonify([])
+        return jsonify({"data": [], "alerts": [], "last_updated": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")})
 
+    # DataFrame base
     df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
     df = validate_data(df)
     df = df.sort_values("timestamp").drop_duplicates(subset="timestamp").reset_index(drop=True)
 
     if len(df) < 50:
-        return jsonify([])
+        return jsonify({"data": [], "alerts": [], "last_updated": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")})
 
+    # Indicadores
     df['tenkan'] = ichimoku_conversion_line(df['high'], df['low'], 9)
     df['kijun'] = ichimoku_base_line(df['high'], df['low'], 26)
+
+    # Proyección de nube (Senkou) adelantada 26 períodos: en backend damos valores adelantados
     df['senkou_a'] = df['tenkan'].shift(26)
     df['senkou_b'] = df['kijun'].shift(26)
     df['cloud'] = df['senkou_a'] > df['senkou_b']
+
     df['vwap'] = volume_weighted_average_price(df['high'], df['low'], df['close'], df['volume'])
     df['returns'] = df['close'].pct_change()
     df['volatility'] = df['returns'].rolling(5).std()
@@ -133,25 +177,35 @@ def serve_data(symbol):
     df['rsi'] = rsi(df['close'], 14)
     df['ewo'] = df['close'].rolling(5).mean() - df['close'].rolling(35).mean()
 
+    # Escalados para mantener compatibilidad con tu frontend actual
     df['atr_scaled'] = df['atr'] * 10
     df['ewo_scaled'] = df['ewo'] * 100
 
+    # Limpieza y redondeo
     df.fillna(0, inplace=True)
     df = df.round(6)
 
+    # Alertas
     signals = generate_alert(df)
 
+    # Respuesta en el formato que espera tu index.html
+    payload = df[[
+        "timestamp", "close", "tenkan", "kijun", "senkou_a", "senkou_b",
+        "vwap", "sma_50", "sma_200", "rsi", "atr_scaled", "ewo_scaled"
+    ]].rename(columns={
+        "atr_scaled": "atr",
+        "ewo_scaled": "ewo"
+    }).to_dict(orient="records")
+
     return jsonify({
-        "data": df[[
-            "timestamp", "close", "tenkan", "kijun", "senkou_a", "senkou_b",
-            "vwap", "sma_50", "sma_200", "rsi", "atr_scaled", "ewo_scaled"
-        ]].rename(columns={
-            "atr_scaled": "atr",
-            "ewo_scaled": "ewo"
-        }).to_dict(orient="records"),
+        "data": payload,
         "alerts": signals,
         "last_updated": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
     })
 
+# -----------------------------
+# Entrypoint
+# -----------------------------
 if __name__ == "__main__":
+    # En Render, host 0.0.0.0 y puerto 5000 funcionan bien en free
     app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
