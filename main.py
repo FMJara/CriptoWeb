@@ -28,10 +28,11 @@ exchange = ccxt.mexc({
 # -----------------------------
 
 def fetch_ohlcv_paged(symbol, timeframe="1h", target=1000, max_retries=3):
-    """Paginación automática para traer más de 1000 velas."""
+    """Trae histórico completo hacia atrás hasta cubrir target velas."""
     all_data = []
     ms_per_candle = exchange.parse_timeframe(timeframe) * 1000
-    since = exchange.milliseconds() - target * ms_per_candle
+    # arrancamos desde "ahora"
+    since = None
 
     while len(all_data) < target:
         batch = []
@@ -44,10 +45,21 @@ def fetch_ohlcv_paged(symbol, timeframe="1h", target=1000, max_retries=3):
                 batch = []
         if not batch:
             break
-        all_data.extend(batch)
-        since = batch[-1][0] + 1
+
+        # si es la primera vez, guardamos
+        if not all_data:
+            all_data = batch
+        else:
+            # concatenamos hacia atrás
+            all_data = batch + all_data
+
+        # mover el cursor hacia atrás
+        first_ts = batch[0][0]
+        since = first_ts - (1000 * ms_per_candle)
+
         if len(batch) < 1000:
             break
+
     return all_data[-target:]
 
 def validate_data(df):
